@@ -8,7 +8,7 @@ What performance factors most strongly predict winning basketball games?
 
 ## Live Demo
 
-Add your deployed Vercel link here after deployment.
+https://sports-dashboard-for-um-basketball.vercel.app/
 
 ## Features
 
