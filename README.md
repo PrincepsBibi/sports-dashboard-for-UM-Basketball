@@ -1,111 +1,108 @@
-# Miami Basketball Analytics Dashboard (Enhanced)
+# Miami Basketball Performance Dashboard
 
-This enhanced version of the Miami Hurricanes men's basketball dashboard refactors the
-original monolithic codebase into a modular structure and introduces a
-meaningful machine‑learning component. The model surfaces actionable
-insights for basketball fans rather than simply reiterating that the team
-loses when it scores fewer points than its opponent.
+An interactive React dashboard analyzing the Miami Hurricanes men's basketball 2025-26 season. The project combines game-level box-score data, player statistics, win/loss comparisons, and a lightweight logistic regression model to explore what separated Miami's wins from losses.
 
-## Folder structure
+## Research Question
+
+What performance factors most strongly predict winning basketball games?
+
+## Live Demo
+
+Add your deployed Vercel link here after deployment.
+
+## Features
+
+- **Overview tab**: season summary, scoring trend, location splits, and a sortable game log.
+- **Players tab**: player leader cards, scoring chart, rotation production chart, and sortable player table.
+- **Winning Factors tab**: top findings, win/loss stat comparison, logistic regression model summary, and coefficient interpretation.
+- **Sortable tables**: game log and player statistics can be sorted by key columns.
+- **Model interpretation**: model coefficients are labeled as positive or negative signals to improve readability.
+
+## Data Source
+
+Data comes from Sports Reference:
+
+https://www.sports-reference.com/cbb/schools/miami-fl/men/2026.html
+
+The dashboard uses game-level team box-score data and season player statistics from the Miami men's basketball 2025-26 page.
+
+## Methods
+
+The dashboard uses descriptive analytics and a simple logistic regression model.
+
+The model intentionally avoids using Miami final points and opponent final points because those directly reveal the game outcome. Instead, it uses process-oriented features:
+
+- Field-goal percentage
+- Three-point percentage
+- Rebounds
+- Assists
+- Turnovers
+- Game location
+
+Because the dataset has only 35 games, the model should be treated as exploratory rather than a production-level prediction system.
+
+## Key Findings
+
+- The model's strongest process-stat signal helps identify which non-score box-score factor most separates wins from losses.
+- Close games were a pressure point: Miami played nine games decided by five points or fewer and went 4-5.
+- Miami's offense leaned heavily on its top three scorers, while frontcourt production anchored rebounding and rim protection.
+
+## Tech Stack
+
+- React
+- Vite
+- Tailwind CSS
+- Recharts
+- Lucide React
+- JavaScript logistic regression
+
+## Run Locally
+
+Clone the repository:
+
+```bash
+git clone https://github.com/PrincepsBibi/sports-dashboard-for-UM-Basketball.git
+cd sports-dashboard-for-UM-Basketball
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Start the development server:
+
+```bash
+npm run dev
+```
+
+Build for production:
+
+```bash
+npm run build
+```
+
+## Project Structure
 
 ```text
 src/
   data/
-    gamesData.js        // Sample game data. Replace with your full dataset.
+    gamesData.js
   utils/
-    analytics.js        // Utility functions to compute derived stats and features.
-    model.js            // Logistic regression training function.
-  components/
-    ModelInsights.jsx   // React component to display ML results.
-  SportsAnalyticsDashboard.jsx // Main dashboard view.
-  main.jsx             // Entry point for Vite/React.
-index.html             // App container.
-tailwind.config.js     // TailwindCSS configuration.
-vite.config.js         // Vite configuration with React plugin.
-package.json           // Dependencies and scripts.
+    analytics.js
+    model.js
+  SportsAnalyticsDashboard.jsx
+  App.jsx
+  main.jsx
+  index.css
+public/
+  miami-basketball-banner.svg
 ```
 
-## Key enhancements
+## Future Improvements
 
-### Modular design
-
-- Data, utilities and components are separated into folders to improve
-  readability and maintainability.
-- The monolithic `SportsAnalyticsDashboard.jsx` file has been broken into
-  smaller pieces, making it easier to extend the dashboard with new charts
-  and tables.
-
-### Meaningful machine‑learning insights
-
-- A lightweight **logistic regression model** estimates the probability of
-  winning using features that basketball fans often discuss: field‑goal
-  percentage, three‑point percentage, rebounds, assists, turnovers (as a
-  negative indicator) and home‑court advantage.
-- The model **intentionally excludes the opponent’s final score** so it
-  doesn't simply learn the trivial fact that Miami loses when the other
-  team scores more points.
-- The `ModelInsights` component surfaces the most important features by
-  sorting their weights by absolute value. Positive weights indicate
-  characteristics correlated with wins, while negative weights indicate
-  factors associated with losses.
-- The model's predicted win probability for each game is displayed
-  alongside the actual result to help you gauge its calibration.
-
-### Getting started
-
-1. Install dependencies:
-
-   ```bash
-   npm install
-   ```
-
-2. Start the development server:
-
-   ```bash
-   npm run dev
-   ```
-
-   This will launch the dashboard at `http://localhost:5173` (default Vite port).
-
-3. Replace the sample data in `src/data/gamesData.js` with your full
-   dataset scraped from Sports Reference or another source. Ensure each
-   game object contains the fields described in that file.
-
-4. Customize and extend the dashboard by adding new components or
-   visualizations to the `src/components` folder and importing them
-   into `SportsAnalyticsDashboard.jsx`.
-
-## Understanding the model
-
-The logistic regression model is trained using gradient descent on
-standardized features. After training, the weights are de‑standardized so
-they relate directly to the original metrics. Larger positive weights
-indicate features associated with higher chances of winning. Negative
-weights indicate areas that hurt the team's chances. You can adjust
-`learningRate` and `iterations` in the call to `trainLogisticRegression`
-to experiment with the training process.
-
-If you have more games in your dataset, the model will produce more
-moderate weights and predictions. The small sample in this repository
-results in extreme probabilities because the training data perfectly
-separates wins and losses based on the selected features.
-
-## Future improvements
-
-- **Increase data size**: Use the full season's games to produce a more
-  nuanced model. More data will reduce over‑fitting and yield more
-  realistic probability estimates.
-- **Add opponent strength**: Include a proxy for opponent quality,
-  such as their ranking or win percentage, to see how Miami performs
-  relative to the strength of its schedule.
-- **Explore other models**: Try regularized logistic regression or
-  tree‑based models to capture non‑linear interactions between features.
-- **Deploy**: Host the dashboard on a platform like Netlify or Vercel
-  and link it in your project README so recruiters can interact with it.
-
----
-
-By following this refactored architecture and the example ML model, you
-can turn your basketball dashboard into a polished, professional
-portfolio project that highlights both your data engineering and data
-science skills.
+- Add opponent strength metrics such as opponent ranking or NET rating.
+- Add more seasons to increase sample size for the model.
+- Add downloadable CSV exports for the game log and player table.
+- Add mobile-specific chart layouts for improved small-screen readability.
