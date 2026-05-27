@@ -4,7 +4,7 @@ import { Trophy, Activity, TrendingUp, Users, Target, Filter, Brain, Database, G
 
 // Simple UI Component Shims
 const Card = ({ children, className = "" }) => (
-  <div className={`bg-white rounded-2xl shadow-sm border-0 ${className}`}>{children}</div>
+  <div className={`bg-white rounded-2xl shadow-sm border border-slate-200/80 ${className}`}>{children}</div>
 );
 
 const CardContent = ({ children, className = "p-5" }) => (
@@ -93,16 +93,30 @@ const gamesData2025 = [
   { gameNum: "G35", date: "2026-03-22", game: "Purdue", points: 69, opponent: 79, fgPct: .444, threePct: .263, rebounds: 30, assists: 17, turnovers: 12, margin: -10, location: "Neutral", result: "L", type: "Tournament" },
 ];
 
-const MetricCard = ({ icon: Icon, label, value, note }) => (
-  <Card className="rounded-2xl border-0 shadow-sm">
+const metricStyles = [
+  "from-emerald-500 to-teal-500",
+  "from-orange-500 to-amber-500",
+  "from-blue-500 to-cyan-500",
+  "from-rose-500 to-orange-500",
+  "from-violet-500 to-fuchsia-500",
+];
+
+const MetricCard = ({ icon: Icon, label, value, note }) => {
+  const accent = metricStyles[label.length % metricStyles.length];
+  return (
+  <Card className="relative overflow-hidden rounded-2xl shadow-sm">
+    <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${accent}`} />
     <CardContent className="p-5">
-      <Icon className="mb-3 h-6 w-6 text-slate-700" />
+      <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${accent} text-white shadow-sm`}>
+        <Icon className="h-5 w-5" />
+      </div>
       <p className="text-sm text-slate-500">{label}</p>
       <p className="mt-1 text-2xl font-bold">{value}</p>
       <p className="mt-1 text-xs text-slate-500">{note}</p>
     </CardContent>
   </Card>
-);
+  );
+};
 
 const SortHeader = ({ label, sortKey, activeSort, onSort, className = "whitespace-nowrap px-4 py-3" }) => (
   <th className={className}>
@@ -130,19 +144,29 @@ const leaderBy = (key, minimumGames = 1) =>
     .reduce((best, player) => (player[key] > best[key] ? player : best));
 
 const modelFeatures = [
-  { key: "points", label: "Miami points" },
-  { key: "opponent", label: "Opponent points" },
   { key: "fgPct", label: "FG%" },
   { key: "threePct", label: "3PT%" },
   { key: "rebounds", label: "Rebounds" },
   { key: "assists", label: "Assists" },
   { key: "turnovers", label: "Turnovers" },
+  { key: "locationValue", label: "Game location" },
 ];
 
 const sigmoid = (value) => 1 / (1 + Math.exp(-value));
 
+const locationValue = (location) => {
+  if (location === "Home") return 1;
+  if (location === "Neutral") return 0.5;
+  return 0;
+};
+
+const modelValue = (game, key) => {
+  if (key === "locationValue") return locationValue(game.location);
+  return game[key];
+};
+
 const trainLogisticRegression = (games) => {
-  const rows = games.map((game) => modelFeatures.map((feature) => game[feature.key]));
+  const rows = games.map((game) => modelFeatures.map((feature) => modelValue(game, feature.key)));
   const labels = games.map((game) => (game.result === "W" ? 1 : 0));
   const means = modelFeatures.map((_, featureIndex) =>
     rows.reduce((sum, row) => sum + row[featureIndex], 0) / rows.length
@@ -200,7 +224,7 @@ const trainLogisticRegression = (games) => {
     weights,
     intercept,
     predict: (game) => {
-      const scaled = modelFeatures.map((feature, index) => (game[feature.key] - means[index]) / stds[index]);
+      const scaled = modelFeatures.map((feature, index) => (modelValue(game, feature.key) - means[index]) / stds[index]);
       const score = intercept + scaled.reduce((sum, value, index) => sum + value * weights[index], 0);
       return sigmoid(score);
     },
@@ -338,13 +362,12 @@ export default function SportsAnalyticsDashboardExample() {
   const threeFactor = winFactors.find((factor) => factor.stat === "3PT%");
   const reboundFactor = winFactors.find((factor) => factor.stat === "Rebounds");
   const filteredProfile = {
-    points: Number(average("points")),
-    opponent: Number(average("opponent")),
     fgPct: averageValue(filteredGames, "fgPct"),
     threePct: averageValue(filteredGames, "threePct"),
     rebounds: averageValue(filteredGames, "rebounds"),
     assists: averageValue(filteredGames, "assists"),
     turnovers: Number(average("turnovers")),
+    location: locationFilter === "All" ? "Neutral" : locationFilter,
   };
   const filteredWinProbability = filteredGames.length ? Math.round(logisticModel.predict(filteredProfile) * 100) : 0;
   const predictorSummary = logisticModel.topPredictors
@@ -352,9 +375,10 @@ export default function SportsAnalyticsDashboardExample() {
     .map((predictor) => `${predictor.label} ${predictor.weight > 0 ? "increases" : "decreases"} win odds`)
     .join(", ");
   const topModelPredictor = logisticModel.topPredictors[0];
-  const seasonTurnoverFactor = seasonWinFactors.find((factor) => factor.stat === "Turnovers");
-  const seasonAssistFactor = seasonWinFactors.find((factor) => factor.stat === "Assists");
   const seasonReboundFactor = seasonWinFactors.find((factor) => factor.stat === "Rebounds");
+  const closeGames = allGames.filter((game) => Math.abs(game.margin) <= 5);
+  const closeWins = closeGames.filter((game) => game.result === "W").length;
+  const closeGameWinPct = Math.round((closeWins / closeGames.length) * 100);
   const topThreeFindings = [
     {
       label: "Model Signal",
@@ -362,9 +386,9 @@ export default function SportsAnalyticsDashboardExample() {
       body: `The logistic regression gives ${topModelPredictor.label.toLowerCase()} the largest coefficient impact, meaning it is the clearest statistical signal in the win/loss classifier.`,
     },
     {
-      label: "Possession Quality",
-      title: `Wins pair fewer turnovers with more assists`,
-      body: `Across the full season, wins averaged ${seasonTurnoverFactor.wins} turnovers and ${seasonAssistFactor.wins} assists, compared with ${seasonTurnoverFactor.losses} turnovers and ${seasonAssistFactor.losses} assists in losses.`,
+      label: "Game Pressure",
+      title: `Close games were Miami's stress test`,
+      body: `Miami played ${closeGames.length} games decided by five points or fewer and went ${closeWins}-${closeGames.length - closeWins}, a ${closeGameWinPct}% win rate that helped separate a good season from a shaky one.`,
     },
     {
       label: "Scoring Profile",
@@ -389,15 +413,15 @@ export default function SportsAnalyticsDashboardExample() {
       finding: `${reboundLeader.player} adds the clearest interior value with ${reboundLeader.trb.toFixed(1)} RPG and ${blockLeader.blk.toFixed(1)} blocks per game.`,
     },
     winning: {
-      body: `The win/loss comparison shows Miami plays cleaner and more connected basketball in wins: turnovers average ${turnoverFactor.wins} in wins versus ${turnoverFactor.losses} in losses, while assists average ${assistFactor.wins} versus ${assistFactor.losses}.`,
-      takeaway: `Wins also come with stronger shot-making and glass work: FG% changes by ${fgFactor.difference}, 3PT% by ${threeFactor.difference}, and rebounds by ${reboundFactor.difference}.`,
-      finding: "Turnover control is the clearest separator because it directly protects possessions while supporting better offensive flow.",
+      body: `The win/loss split points to efficiency and glass work more than one single box-score stat: FG% changes by ${fgFactor.difference}, 3PT% by ${threeFactor.difference}, and rebounds by ${reboundFactor.difference}.`,
+      takeaway: `The model supports that read by ranking ${topModelPredictor.label.toLowerCase()} as its strongest process-stat signal, while the close-game record (${closeWins}-${closeGames.length - closeWins}) shows Miami still had trouble converting tight margins.`,
+      finding: "Miami was strongest when the shot quality and rebounding profile tilted in its favor, but close-game execution remained the biggest pressure point.",
     },
   };
 
   const tabSummary = {
     overview: `Miami went 26-9, averaged ${teamTotals.pts.toFixed(1)} points, and outscored opponents by ${(teamTotals.pts - opponentPPG).toFixed(1)} points per game.`,
-    players: `The player view focuses on the roster's major box-score categories, led by ${scoringLeader.player}'s ${scoringLeader.pts.toFixed(1)} points and ${reboundLeader.player}'s ${reboundLeader.trb.toFixed(1)} rebounds per game.`,
+    players: `Miami's rotation has a clear structure: three primary scorers create most of the offense, while the frontcourt supplies the rebounding and rim protection.`,
     winning: `The winning factors view compares wins and losses, then uses logistic regression to test which box-score inputs most strongly classify outcomes.`,
   };
 
@@ -410,21 +434,26 @@ export default function SportsAnalyticsDashboardExample() {
 
   const buttonClass = (page) =>
     activePage === page
-      ? "bg-blue-600 text-white hover:bg-blue-700"
-      : "border bg-white text-slate-700 hover:bg-slate-100";
+      ? "bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
+      : "border border-slate-200 bg-white text-slate-700 hover:border-orange-300 hover:bg-orange-50";
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 text-slate-900">
+    <div className="min-h-screen bg-[linear-gradient(135deg,#ecfdf5_0%,#ffffff_48%,#fff7ed_100%)] p-6 text-slate-900">
       <div className="mx-auto max-w-7xl space-y-6">
-        <div className="rounded-3xl bg-white p-6 shadow-sm">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-sm">
+          <img
+            src="/miami-basketball-banner.svg"
+            alt="Miami Hurricanes basketball banner"
+            className="h-40 w-full object-cover sm:h-48 lg:h-56"
+          />
+          <div className="flex flex-col gap-5 p-6 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">Portfolio Project</p>
-              <h1 className="mt-1 text-3xl font-bold tracking-tight">Miami Basketball Performance Dashboard</h1>
+                <p className="text-sm font-semibold uppercase tracking-wide text-orange-600">Portfolio Project</p>
+                <h1 className="mt-1 text-3xl font-bold tracking-tight">Miami Basketball Performance Dashboard</h1>
               <p className="mt-2 max-w-3xl text-slate-600">
                 An interactive analytics dashboard using all games from Miami men's basketball's 2025-26 season to study scoring trends, game margins, and the factors that separate wins from losses.
               </p>
-              <p className="mt-3 rounded-xl bg-slate-100 px-4 py-3 text-sm font-medium text-slate-700">
+              <p className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950">
                 Research Question: What performance factors most strongly predict winning basketball games?
               </p>
             </div>
@@ -475,7 +504,7 @@ export default function SportsAnalyticsDashboardExample() {
                     </select>
                   </div>
                 </div>
-                <div className="mt-6 rounded-xl bg-blue-50 p-4 text-sm text-blue-900">
+                <div className="mt-6 rounded-xl border border-orange-100 bg-orange-50 p-4 text-sm text-orange-950">
                   Use the filters to compare team performance by game type, location, and result.
                 </div>
               </CardContent>
@@ -485,7 +514,7 @@ export default function SportsAnalyticsDashboardExample() {
           <div className="space-y-6">
             <Card className="rounded-2xl border-0 shadow-sm">
               <CardContent className="p-6">
-                <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">{activePage === "overview" ? "Overview" : activePage === "players" ? "Players" : "Winning Factors"}</p>
+                <p className="text-sm font-semibold uppercase tracking-wide text-emerald-600">{activePage === "overview" ? "Overview" : activePage === "players" ? "Players" : "Winning Factors"}</p>
                 <p className="mt-2 text-lg font-semibold text-slate-900">{tabSummary[activePage]}</p>
               </CardContent>
             </Card>
@@ -528,12 +557,12 @@ export default function SportsAnalyticsDashboardExample() {
                   <CardContent className="p-6">
                     <h2 className="text-xl font-semibold">Key Insight</h2>
                     <p className="mt-3 text-slate-600">{insightCopy[activePage].body}</p>
-                    <div className="mt-5 rounded-xl bg-slate-100 p-4">
-                      <p className="text-sm font-medium text-slate-500">Data takeaway</p>
+                    <div className="mt-5 rounded-xl border border-orange-100 bg-orange-50 p-4">
+                      <p className="text-sm font-medium text-orange-700">Data takeaway</p>
                       <p className="mt-1 font-semibold">{insightCopy[activePage].takeaway}</p>
                     </div>
-                    <div className="mt-4 rounded-xl bg-slate-900 p-4 text-white">
-                      <p className="text-sm text-slate-300">Main finding</p>
+                    <div className="mt-4 rounded-xl bg-emerald-950 p-4 text-white">
+                      <p className="text-sm text-emerald-100">Main finding</p>
                       <p className="text-lg font-bold">{insightCopy[activePage].finding}</p>
                     </div>
                   </CardContent>
@@ -607,7 +636,7 @@ export default function SportsAnalyticsDashboardExample() {
                 </div>
                 <div className="overflow-x-auto rounded-xl border">
                   <table className="min-w-[1320px] w-full text-left text-xs">
-                    <thead className="bg-slate-100 text-slate-600">
+                    <thead className="bg-emerald-50 text-emerald-900">
                       <tr>
                         {majorColumns.map(([, label]) => (
                           <SortHeader
@@ -623,7 +652,7 @@ export default function SportsAnalyticsDashboardExample() {
                     </thead>
                     <tbody className="divide-y bg-white">
                       {sortedPlayers.map((row) => (
-                        <tr key={row.player} className={row.rk <= 5 ? "bg-blue-50/40" : ""}>
+                        <tr key={row.player} className={row.rk <= 5 ? "bg-orange-50/50" : ""}>
                           {majorColumns.map(([key]) => (
                             <td key={`${row.player}-${key}`} className={`whitespace-nowrap px-3 py-3 ${key === "player" ? "font-semibold text-slate-900" : "text-slate-700"}`}>
                               {formatStat(row[key], key)}
@@ -661,7 +690,7 @@ export default function SportsAnalyticsDashboardExample() {
                 </div>
                 <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
                   {locationSplits.map((split) => (
-                    <div key={split.location} className="rounded-xl bg-slate-100 p-3">
+                    <div key={split.location} className="rounded-xl border border-emerald-100 bg-emerald-50 p-3">
                       <p className="font-semibold">{split.location}</p>
                       <p className="text-slate-600">{split.wins}-{split.losses} record</p>
                       <p className="text-slate-600">{split.margin > 0 ? "+" : ""}{split.margin.toFixed(1)} margin</p>
@@ -679,7 +708,7 @@ export default function SportsAnalyticsDashboardExample() {
                     <p className="text-sm text-slate-500">Raw game-level data behind the charts, filtered by game type, location, and result.</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
-                    <div className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-900">
                       {filteredGames.length} games | {wins}-{filteredGames.length - wins} record
                     </div>
                     {sortedGames.length > 10 && (
@@ -695,7 +724,7 @@ export default function SportsAnalyticsDashboardExample() {
                 </div>
                 <div className="overflow-x-auto rounded-xl border">
                   <table className="min-w-[980px] w-full text-left text-sm">
-                    <thead className="bg-slate-100 text-slate-600">
+                    <thead className="bg-emerald-50 text-emerald-900">
                       <tr>
                         <SortHeader label="Game" sortKey="gameNum" activeSort={gameSort} onSort={(key) => updateSort(gameSort, setGameSort, key)} />
                         <SortHeader label="Date" sortKey="date" activeSort={gameSort} onSort={(key) => updateSort(gameSort, setGameSort, key)} />
@@ -750,10 +779,10 @@ export default function SportsAnalyticsDashboardExample() {
                 </div>
                 <div className="grid gap-4 md:grid-cols-3">
                   {topThreeFindings.map((finding, index) => (
-                    <div key={finding.label} className="rounded-xl bg-slate-100 p-4">
+                    <div key={finding.label} className="rounded-xl border border-orange-100 bg-gradient-to-br from-white to-orange-50 p-4">
                       <div className="mb-3 flex items-center gap-2">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">{index + 1}</span>
-                        <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">{finding.label}</p>
+                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-orange-600 text-sm font-bold text-white">{index + 1}</span>
+                        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">{finding.label}</p>
                       </div>
                       <h3 className="text-lg font-bold text-slate-900">{finding.title}</h3>
                       <p className="mt-2 text-sm leading-6 text-slate-600">{finding.body}</p>
@@ -768,12 +797,12 @@ export default function SportsAnalyticsDashboardExample() {
                 <CardContent className="p-6">
                   <h2 className="text-xl font-semibold">Key Insight</h2>
                   <p className="mt-3 text-slate-600">{insightCopy[activePage].body}</p>
-                  <div className="mt-5 rounded-xl bg-slate-100 p-4">
-                    <p className="text-sm font-medium text-slate-500">Data takeaway</p>
+                  <div className="mt-5 rounded-xl border border-orange-100 bg-orange-50 p-4">
+                    <p className="text-sm font-medium text-orange-700">Data takeaway</p>
                     <p className="mt-1 font-semibold">{insightCopy[activePage].takeaway}</p>
                   </div>
-                  <div className="mt-4 rounded-xl bg-slate-900 p-4 text-white">
-                    <p className="text-sm text-slate-300">Main finding</p>
+                  <div className="mt-4 rounded-xl bg-emerald-950 p-4 text-white">
+                    <p className="text-sm text-emerald-100">Main finding</p>
                     <p className="text-lg font-bold">{insightCopy[activePage].finding}</p>
                   </div>
                 </CardContent>
@@ -810,7 +839,7 @@ export default function SportsAnalyticsDashboardExample() {
               <p className="mb-4 text-sm text-slate-500">The same win/loss comparison in table form for quick scanning.</p>
               <div className="overflow-hidden rounded-xl border">
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-100 text-slate-600">
+                  <thead className="bg-emerald-50 text-emerald-900">
                     <tr>
                       <th className="px-4 py-3">Factor</th>
                       <th className="px-4 py-3">Wins</th>
@@ -839,22 +868,22 @@ export default function SportsAnalyticsDashboardExample() {
                 <Brain className="h-6 w-6" />
                 <h2 className="text-xl font-semibold">Can the Box Score Predict a Win?</h2>
               </div>
-              <p className="text-slate-600">A logistic regression model trained on the 35 game rows predicts win/loss outcomes from box-score statistics.</p>
+              <p className="text-slate-600">A logistic regression model trained on the 35 game rows predicts win/loss outcomes from shooting, rebounding, assists, turnovers, and location.</p>
               <p className="mt-2 text-sm text-slate-500">Because this is a small season sample, the model should be read as exploratory evidence, not a production-grade forecast.</p>
               <div className="mt-5 space-y-3">
-                <div className="rounded-xl bg-slate-100 p-4"><p className="text-sm text-slate-500">Model</p><p className="font-bold">Logistic Regression</p></div>
-                <div className="rounded-xl bg-slate-100 p-4">
-                  <p className="text-sm text-slate-500">Training Accuracy</p>
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4"><p className="text-sm text-emerald-700">Model</p><p className="font-bold">Logistic Regression</p></div>
+                <div className="rounded-xl border border-orange-100 bg-orange-50 p-4">
+                  <p className="text-sm text-orange-700">Training Accuracy</p>
                   <p className="font-bold">{logisticModel.accuracy}%</p>
                   <p className="mt-1 text-xs text-slate-500">{logisticModel.correct} of {logisticModel.total} games classified correctly</p>
                 </div>
-                <div className="rounded-xl bg-slate-100 p-4">
-                  <p className="text-sm text-slate-500">Filtered Profile</p>
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+                  <p className="text-sm text-blue-700">Filtered Profile</p>
                   <p className="font-bold">{filteredWinProbability}% win probability</p>
                   <p className="mt-1 text-xs text-slate-500">Based on the current filter averages</p>
                 </div>
-                <div className="rounded-xl bg-slate-100 p-4">
-                  <p className="text-sm text-slate-500">Top Predictors</p>
+                <div className="rounded-xl border border-violet-100 bg-violet-50 p-4">
+                  <p className="text-sm text-violet-700">Top Predictors</p>
                   <p className="font-bold">{predictorSummary}</p>
                 </div>
               </div>
@@ -870,7 +899,7 @@ export default function SportsAnalyticsDashboardExample() {
               <p className="mb-4 text-sm text-slate-500">Positive coefficients push the prediction toward a win. Negative coefficients push it toward a loss after the features are standardized.</p>
               <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
                 {logisticModel.topPredictors.map((predictor) => (
-                  <div key={predictor.key} className="rounded-xl bg-slate-100 p-4">
+                  <div key={predictor.key} className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-emerald-50 p-4">
                     <p className="text-sm font-semibold text-slate-800">{predictor.label}</p>
                     <p className={`mt-1 text-xl font-bold ${predictor.weight >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
                       {predictor.weight >= 0 ? "+" : ""}{predictor.weight.toFixed(2)}
@@ -887,10 +916,10 @@ export default function SportsAnalyticsDashboardExample() {
           <CardContent className="p-6">
             <h2 className="text-xl font-semibold">Technical Project Summary</h2>
             <div className="mt-4 grid gap-4 md:grid-cols-4">
-              <div className="rounded-xl bg-slate-100 p-4"><Database className="mb-2 h-5 w-5" /><p className="font-semibold">Data Cleaning</p><p className="text-sm text-slate-600">Cleaned box-score data with Python and Pandas.</p></div>
-              <div className="rounded-xl bg-slate-100 p-4"><BarChart3 className="mb-2 h-5 w-5" /><p className="font-semibold">Visualization</p><p className="text-sm text-slate-600">Built charts for team trends and player analysis.</p></div>
-              <div className="rounded-xl bg-slate-100 p-4"><Brain className="mb-2 h-5 w-5" /><p className="font-semibold">Machine Learning</p><p className="text-sm text-slate-600">Predicted wins using game-level performance stats.</p></div>
-              <div className="rounded-xl bg-slate-100 p-4"><Github className="mb-2 h-5 w-5" /><p className="font-semibold">GitHub Portfolio</p><p className="text-sm text-slate-600">Documented the project with README and screenshots.</p></div>
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4"><Database className="mb-2 h-5 w-5 text-emerald-700" /><p className="font-semibold">Data Cleaning</p><p className="text-sm text-slate-600">Cleaned box-score data with Python and Pandas.</p></div>
+              <div className="rounded-xl border border-orange-100 bg-orange-50 p-4"><BarChart3 className="mb-2 h-5 w-5 text-orange-700" /><p className="font-semibold">Visualization</p><p className="text-sm text-slate-600">Built charts for team trends and player analysis.</p></div>
+              <div className="rounded-xl border border-blue-100 bg-blue-50 p-4"><Brain className="mb-2 h-5 w-5 text-blue-700" /><p className="font-semibold">Machine Learning</p><p className="text-sm text-slate-600">Predicted wins using game-level performance stats.</p></div>
+              <div className="rounded-xl border border-violet-100 bg-violet-50 p-4"><Github className="mb-2 h-5 w-5 text-violet-700" /><p className="font-semibold">GitHub Portfolio</p><p className="text-sm text-slate-600">Documented the project with README and screenshots.</p></div>
             </div>
           </CardContent>
         </Card>
